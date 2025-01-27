@@ -23,6 +23,7 @@
 #include "sl_tools.hpp"
 #include "sl_types.hpp"
 #include "visibility_control.hpp"
+#include <std_msgs/msg/float32.hpp>
 
 namespace stereolabs
 {
@@ -619,7 +620,8 @@ private:
   depthInfoPub mPubDepthInfo;
   planePub mPubPlane;
   markerPub mPubMarker;
-
+        std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float32>> img_frequency_publisher;
+        std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float32>> obj_frequency_publisher;
   geoPosePub mPubGeoPose;
   gnssFusionStatusPub mPubGeoPoseStatus;
   gnssFixPub mPubFusedFix;

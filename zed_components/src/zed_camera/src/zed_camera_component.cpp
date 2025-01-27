@@ -35,6 +35,7 @@
 
 #ifdef FOUND_HUMBLE
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <std_msgs/msg/float32.hpp>
 #elif defined FOUND_IRON
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #elif defined FOUND_FOXY
@@ -3565,6 +3566,11 @@ void ZedCamera::initPublishers()
     RCLCPP_INFO_STREAM(
       get_logger(),
       "Advertised on topic: " << mPubDepth.getInfoTopic());
+
+    img_frequency_publisher = create_publisher<std_msgs::msg::Float32>(
+              mTopicRoot + "img_frequency", mQos);
+    obj_frequency_publisher = create_publisher<std_msgs::msg::Float32>(
+              mTopicRoot + "obj_frequency", mQos);
     mPubDepthInfo = create_publisher<zed_interfaces::msg::DepthInfoStamped>(
       depth_info_topic, mQos, mPubOpt);
     RCLCPP_INFO_STREAM(
@@ -4013,7 +4019,15 @@ bool ZedCamera::startCamera()
           get_logger(),
           "Try to flip the USB3 Type-C connector and verify the USB3 "
           "connection");
-      } else {
+      }
+      else if(sl::Camera::reboot(sl::INPUT_TYPE::USB) == sl::ERROR_CODE::SUCCESS)
+      {
+          RCLCPP_INFO(
+                  get_logger(),
+                  "Rebooted camera");
+      }
+      else {
+          sl::Camera::reboot(sl::INPUT_TYPE::USB);
         RCLCPP_INFO(get_logger(), "Please verify the camera connection");
       }
     }
@@ -10047,6 +10061,10 @@ void ZedCamera::callback_updateDiagnostic(
     double freq = 1. / mGrabPeriodMean_sec->getAvg();
     double freq_perc = 100. * freq / mPubFrameRate;
     stat.addf("Capture", "Mean Frequency: %.1f Hz (%.1f%%)", freq, freq_perc);
+    std_msgs::msg::Float32 msg;
+
+    msg.data = freq;
+    img_frequency_publisher->publish(msg);
 
     double frame_proc_sec = mElabPeriodMean_sec->getAvg();
     // double frame_grab_period = 1. / mCamGrabFrameRate;
@@ -10195,7 +10213,11 @@ void ZedCamera::callback_updateDiagnostic(
           stat.addf(
             "Object detection", "Mean Frequency: %.3f Hz  (%.1f%%)",
             freq, freq_perc);
-          stat.addf(
+
+            msg.data = freq;
+            obj_frequency_publisher->publish(msg);
+
+            stat.addf(
             "Object detection",
             "Processing Time: %.3f sec (Max. %.3f sec)",
             mObjDetElabMean_sec->getAvg(), frame_grab_period);
