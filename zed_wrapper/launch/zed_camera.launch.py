@@ -30,19 +30,15 @@ from launch.substitutions import (
     Command,
     TextSubstitution
 )
-from launch_ros.actions import (
-    Node,
-    ComposableNodeContainer
-)
-from launch_ros.descriptions import ComposableNode
+from launch_ros.actions import Node
 
 # ZED Configurations to be loaded by ZED Node
 default_config_common = os.path.join(
     get_package_share_directory('zed_wrapper'),
     'config',
-    'common'
+    'common.yaml'
 )
-    
+
 # FFMPEG Configuration to be loaded by ZED Node
 default_config_ffmpeg = os.path.join(
     get_package_share_directory('zed_wrapper'),
@@ -116,21 +112,6 @@ def launch_setup(context, *args, **kwargs):
         return [
             LogInfo(msg="Please set a positive value for the 'custom_baseline' argument when using a 'virtual' Stereo Camera with two ZED X One devices."),
         ]
-    
-    config_common_path_val = config_common_path.perform(context)
-    if (config_common_path_val == ''):
-        if (camera_model_val == 'zed' or 
-            camera_model_val == 'zedm' or 
-            camera_model_val == 'zed2' or 
-            camera_model_val == 'zed2i' or 
-            camera_model_val == 'zedx' or 
-            camera_model_val == 'zedxm' or
-            camera_model_val == 'virtual'):
-            config_common_path_val = default_config_common + '_stereo.yaml'
-        else:
-            config_common_path_val = default_config_common + '_mono.yaml'
-
-    print('Using common configuration file: ' + config_common_path_val)
 
     config_camera_path = os.path.join(
         get_package_share_directory('zed_wrapper'),
@@ -182,7 +163,7 @@ def launch_setup(context, *args, **kwargs):
 
     node_parameters = [
             # YAML files
-            config_common_path_val,  # Common parameters
+            config_common_path,  # Common parameters
             config_camera_path,  # Camera related parameters
             config_ffmpeg, # FFMPEG parameters
             # Overriding
@@ -207,54 +188,23 @@ def launch_setup(context, *args, **kwargs):
     if( ros_params_override_path.perform(context) != ''):
         node_parameters.append(ros_params_override_path)
 
-    # ZED Wrapper component
-    if( camera_model_val=='zed' or
-        camera_model_val=='zedm' or
-        camera_model_val=='zed2' or
-        camera_model_val=='zed2i' or
-        camera_model_val=='zedx' or
-        camera_model_val=='zedxm' or
-        camera_model_val=='virtual'):
-        zed_wrapper_component = ComposableNode(
-            package='zed_components',
-            namespace=camera_name_val,
-            plugin='stereolabs::ZedCamera',
-            name=node_name,
-            parameters=node_parameters,
-            extra_arguments=[{'use_intra_process_comms': True}]
-        )
-    else: # 'zedxonegs' or 'zedxone4k')
-        zed_wrapper_component = ComposableNode(
-            package='zed_components',
-            namespace=camera_name_val,
-            plugin='stereolabs::ZedCameraOne',
-            name=node_name,
-            parameters=node_parameters,
-            extra_arguments=[{'use_intra_process_comms': True}]
-        )
-
-    # ROS 2 Component Container
-    distro = os.environ['ROS_DISTRO']
-    if distro == 'foxy':
-        # Foxy does not support the isolated mode
-        container_exec='component_container'
-    else:
-        container_exec='component_container_isolated'
-    
-    zed_container = ComposableNodeContainer(
-            name='zed_container',
-            namespace=camera_name_val,
-            package='rclcpp_components',
-            executable=container_exec,
-            composable_node_descriptions=[
-                zed_wrapper_component
-            ],
-            output='screen',
+    # ZED Wrapper node
+    zed_wrapper_node = Node(
+        package='zed_wrapper',
+        namespace=camera_name_val,
+        executable='zed_wrapper',
+        name=node_name,
+        output='screen',
+        #prefix=['valgrind'],
+        #prefix=['xterm -e valgrind --tools=callgrind'],
+        #prefix=['xterm -e gdb -ex run --args'],
+        #prefix=['gdbserver localhost:3000'],
+        parameters=node_parameters
     )
 
     return [
         rsp_node,
-        zed_container
+        zed_wrapper_node
     ]
 
 
@@ -269,15 +219,15 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 'camera_model',
                 description='[REQUIRED] The model of the camera. Using a wrong camera model can disable camera features.',
-                choices=['zed', 'zedm', 'zed2', 'zed2i', 'zedx', 'zedxm', 'virtual', 'zedxonegs', 'zedxone4k']),
+                choices=['zed', 'zedm', 'zed2', 'zed2i', 'zedx', 'zedxm', 'virtual']),
             DeclareLaunchArgument(
                 'node_name',
                 default_value='zed_node',
                 description='The name of the zed_wrapper node. All the topic will have the same prefix: `/<camera_name>/<node_name>/`'),
             DeclareLaunchArgument(
                 'config_path',
-                default_value='',
-                description='Path to the YAML configuration file for the camera. common_stereo.yaml is used by default for stereo cameras, common_mono.yaml for mono cameras.'),
+                default_value=TextSubstitution(text=default_config_common),
+                description='Path to the YAML configuration file for the camera.'),
             DeclareLaunchArgument(
                 'ffmpeg_config_path',
                 default_value=TextSubstitution(text=default_config_ffmpeg),
@@ -321,7 +271,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 'enable_gnss',
                 default_value='false',
-                description='Enable GNSS fusion to fix positional tracking pose with GNSS data from messages of type `sensor_msgs::msg::NavSatFix`. The fix topic can be customized in `common_stereo.yaml`.',
+                description='Enable GNSS fusion to fix positional tracking pose with GNSS data from messages of type `sensor_msgs::msg::NavSatFix`. The fix topic can be customized in `common.yaml`.',
                 choices=['true', 'false']),
             DeclareLaunchArgument(
                 'gnss_antenna_offset',
